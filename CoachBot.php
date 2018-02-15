@@ -9,11 +9,29 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
     const DECISION_NO = 'no';
     const DECISION_MAYBE = 'maybe';
 
+    public function startCommand()
+    {
+        if ($this->isChatGroup()) {
+            $this->whoCommand();
+        } else {
+            try {
+                $this->telegram->sendPhoto(
+                    $this->getChatId(),
+                    'AgADAgADxKgxG2LCMEinbDJ0CLbbq5IMMw4ABG3m4guYcA37YBQEAAEC',
+                    'Добавь меня в группу и я вас быстро всех построю! 👊'
+                );
+            } catch (Exception $e) {
+                $this->reply('Добавь меня в группу и я вас быстро всех построю! 👊');
+            }
+
+        }
+    }
+
     /**
-     * Начать перекличку
+     * Начать перекличку, если после команды указать повод, он будет добавлен отдельной строкой
      * @admin
      */
-    public function callCommand()
+    public function whoCommand()
     {
         $reason = $this->getParams($this->e);
         $reply = $this->getRosterHeader($reason);
