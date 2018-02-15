@@ -29,10 +29,20 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
 
     /**
      * Начать перекличку, если после команды указать повод, он будет добавлен отдельной строкой
-     * @admin
      */
     public function whoCommand()
     {
+        if (!$this->isChatGroup()) {
+            $this->reply('Прокопенко, ты своей квадратной головой совсем думать разучился? Перекличка только в группе возможна 🙈');
+            return;
+        }
+        if (!$this->isAdmin()) {
+            $this->telegram->sendPhoto($this->getChatId(), 'AgADAgAD7agxG8jmMUjOFaxkpfygEIQHnA4ABGtOwd_TB95lK2cBAAEC',
+                "А сегодня в завтрашний день не все могут смотреть. Вернее смотреть могут не только лишь все, мало кто может это делать ☝️\n"
+                . "А уж переклички проводить, так подавно 😎"
+            );
+            return;
+        }
         $reason = $this->getParams($this->e);
         $reply = $this->getRosterHeader($reason);
         $buttons = $this->getCallButtons();
@@ -72,7 +82,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             return;
         }
         $reply = $this->getRosterHeader($this->getChatConfig('session.reason'));
-        $reply .= "\n---------------------------------------------------\n";
+        $reply .= "------------------------------------------------\n";
         $reply .= "<b>Результаты переклички</b>: \n ";
         $decisions = [
             self::DECISION_YES => [],
@@ -91,7 +101,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             if ($count) {
                 $reply .= "<b>{$label}</b> ($count)\n";
                 foreach ($decisions[$decision] as $user) {
-                    $reply .= "  ☇ " . $this->getUserName($user, $userId);
+                    $reply .= "  ☇ " . $this->getUserName($user, $userId)."\n";
                 }
             }
 
@@ -107,8 +117,8 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
      */
     protected function getRosterHeader($reason)
     {
-        $reply = "⚽️ <b>Внимание! Начинаем перекличку!</b> ⚽\n";
-        if (!empty($reason)) $reply .= "---------------------------------------------------\n📆 <i>$reason</i>\n";
+        $reply = "⚽️ <b>Внимание! Перекличка!</b>\n";
+        if (!empty($reason)) $reply .= "------------------------------------------------\n📆 <i>$reason</i>\n";
         return $reply;
     }
 
