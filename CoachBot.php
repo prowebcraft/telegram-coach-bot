@@ -14,16 +14,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         if ($this->isChatGroup()) {
             $this->whoCommand();
         } else {
-            try {
-                $this->telegram->sendPhoto(
-                    $this->getChatId(),
-                    'AgADAgADxKgxG2LCMEinbDJ0CLbbq5IMMw4ABG3m4guYcA37YBQEAAEC',
-                    'Добавь меня в группу и я вас быстро всех построю! 👊'
-                );
-            } catch (Exception $e) {
-                $this->reply('Добавь меня в группу и я вас быстро всех построю! 👊');
-            }
-
+            $this->sendPhoto('AgADAgADxKgxG2LCMEinbDJ0CLbbq5IMMw4ABG3m4guYcA37YBQEAAEC', 'Добавь меня в группу и я вас быстро всех построю! 👊');
         }
     }
 
@@ -37,7 +28,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             return;
         }
         if (!$this->isAdmin()) {
-            $this->telegram->sendPhoto($this->getChatId(), 'AgADAgAD7agxG8jmMUjOFaxkpfygEIQHnA4ABGtOwd_TB95lK2cBAAEC',
+            $this->sendPhoto('AgADAgAD7agxG8jmMUjOFaxkpfygEIQHnA4ABGtOwd_TB95lK2cBAAEC',
                 "А сегодня в завтрашний день не все могут смотреть. Вернее смотреть могут не только лишь все, мало кто может это делать ☝️\n"
                 . "А уж переклички проводить, так подавно 😎"
             );
