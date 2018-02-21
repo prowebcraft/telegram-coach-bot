@@ -1,5 +1,6 @@
 <?php
 
+use Prowebcraft\Telebot\Answer;
 use Prowebcraft\Telebot\AnswerInline;
 
 class CoachBot extends \Prowebcraft\Telebot\Telebot
@@ -19,6 +20,26 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
     }
 
     /**
+     * Открыть свободный режим
+     * @admin
+     */
+    public function openCommand()
+    {
+        $this->setChatConfig('mode', 'open');
+        $this->reply('Свободный режим активирован. Все могут начать перекличку');
+    }
+
+    /**
+     * Закрыть свободный режим
+     * @admin
+     */
+    public function closeCommand()
+    {
+        $this->setChatConfig('mode', 'close');
+        $this->reply('Свободный режим отключен. Перекличку могут начать только администраторы');
+    }
+
+    /**
      * Начать перекличку, если после команды указать повод, он будет добавлен отдельной строкой
      */
     public function whoCommand()
@@ -27,7 +48,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             $this->reply('Прокопенко, ты своей квадратной головой совсем думать разучился? Перекличка только в группе возможна 🙈');
             return;
         }
-        if (!$this->isAdmin()) {
+        if ($this->getChatConfig('mode') != 'open' && !$this->isAdmin()) {
             $this->sendPhoto('AgADAgAD7agxG8jmMUjOFaxkpfygEIQHnA4ABGtOwd_TB95lK2cBAAEC',
                 "А сегодня в завтрашний день не все могут смотреть. Вернее смотреть могут не только лишь все, мало кто может это делать ☝️\n"
                 . "А уж переклички проводить, так подавно 😎"
@@ -56,14 +77,55 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         }
         $userId = $this->getUserId();
         $decision = $answer->getData();
-        $this->setSessionConfig($sessionId, "users.{$userId}", $decision);
         $this->addSessionConfig($sessionId, 'log', [
             'time' => date("Y-m-d H:i:s"),
             'user' => $this->getFromName(null, true),
             'answer' => $decision
         ]);
+        switch ($decision) {
+            case self::DECISION_YES:
+            case self::DECISION_MAYBE:
+            case self::DECISION_NO:
+                $this->setSessionConfig($sessionId, "users.{$userId}", $decision);
+                $answer->reply("👌 Голос учтен", false);
+                break;
+            case 'change_title':
+                if ($this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin()) {
+                    $answer->reply('Изменить повестку может только организатор или админ 👮');
+                    return;
+                }
+                $ask = sprintf("<b>Меняем повестку для переклички №%s</b>", $sessionId);
+                if ($reason = $this->getSessionConfig($sessionId, 'reason')) {
+                    $ask .= sprintf("\n\n<b>Текущая повестка</b>: %s", $reason);
+                }
+                $this->ask($ask, null, 'setTitleCallback', false, true, [
+                    'id' => $sessionId
+                ]);
+                break;
+            case 'finish':
+                if ($this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin()) {
+                    $answer->reply('Завершить перекличку может только организатор или админ 👮');
+                    return;
+                }
+                $this->setSessionConfig($sessionId, 'status', 'closed');
+                break;
+        }
+
         $this->updateRosterMessage($sessionId);
-        $answer->reply("👌 Голос учтен", false);
+    }
+
+    /**
+     * @param Answer $answer
+     */
+    public function setTitleCallback(Answer $answer)
+    {
+        $id = $answer->getExtraData('id');
+        if ($id) {
+            $this->setSessionConfig($id, 'reason', $answer->getReplyText());
+            $this->updateRosterMessage($id);
+        } else {
+            $this->error('Error updating title for session. Message Id: %s, Info: %s', $answer->getAskMessageId(), $answer->getInfo());
+        }
     }
 
     /**
@@ -182,6 +244,16 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 'text' => "🤷‍♂️ Может быть",
                 'callback_data' => self::DECISION_MAYBE
             ],
+        ];
+        $buttons[] = [
+            [
+                'text' => "📋 Изменить повестку",
+                'callback_data' => 'change_title'
+            ],
+            [
+                'text' => "🏁 Завершить перекличку",
+                'callback_data' => 'finish'
+            ]
         ];
         return $buttons;
     }
