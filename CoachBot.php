@@ -38,8 +38,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         $reply = $this->getRosterHeader($reason);
         $buttons = $this->getCallButtons();
         $post = $this->askInline($reply, $buttons, 'onCallReply');
-        $this->setChatConfig('session', [
-            'id' => $post->getMessageId(),
+        $this->setChatConfig('sessions.' . $post->getMessageId(), [
             'status' => 'open',
             'reason' => $reason,
             'starter' => $this->getUserId(),
@@ -50,16 +49,15 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
 
     public function onCallReply(AnswerInline $answer)
     {
-        if (!($this->getChatConfig('session.status') == 'open')) {
+        $sessionId = $answer->getCallbackQuery()->getMessage()->getMessageId();
+        if (!($this->getSessionConfig($sessionId, 'status') == 'open')) {
             $answer->reply("Перекличка завершена 💩", true);
             return;
         }
-        $sessionId = $answer->getCallbackQuery()->getMessage()->getMessageId();
         $userId = $this->getUserId();
         $decision = $answer->getData();
-        //todo set correct session data
-        $this->setChatConfig("session.users.{$userId}", $decision);
-        $this->addChatConfig("session.log", [
+        $this->setSessionConfig($sessionId, "users.{$userId}", $decision);
+        $this->addSessionConfig($sessionId, 'log', [
             'time' => date("Y-m-d H:i:s"),
             'user' => $this->getFromName(null, true),
             'answer' => $decision
@@ -89,7 +87,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
      */
     public function setSessionConfig($id, $key, $value)
     {
-        $this->setChatConfig("sessions.$id", $key, $value);
+        $this->setChatConfig("sessions.$id.$key", $value);
         return $this;
     }
 
@@ -101,7 +99,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
      */
     public function addSessionConfig($id, $key, $value)
     {
-        $this->addChatConfig("sessions.$id", $key, $value);
+        $this->addChatConfig("sessions.$id.$key", $value);
         return $this;
     }
 
@@ -125,10 +123,10 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         $reply .= "<b>Результаты переклички</b>: \n ";
         $decisions = [
             self::DECISION_YES => [],
+            self::DECISION_MAYBE => [],
             self::DECISION_NO => [],
-            self::DECISION_MAYBE => []
         ];
-        foreach ($this->getSessionConfig('users', []) as $userId => $decision) {
+        foreach ($this->getSessionConfig($id, 'users', []) as $userId => $decision) {
             $decisions[$decision][] = $userId;
         }
         foreach ([
@@ -149,7 +147,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         try {
             $this->updateInlineMessage($id, $reply, $buttons);
         } catch (Exception $e) {
-            System_Daemon::err("Error updating roster message - %s\nTrace: %s", $e->getMessage(), $e->getTraceAsString());
+            $this->error("Error updating roster message - %s\nTrace: %s", $e->getMessage(), $e->getTraceAsString());
         }
 
     }
