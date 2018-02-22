@@ -94,7 +94,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                     $answer->reply('Изменить повестку может только организатор или админ 👮');
                     return;
                 }
-                $ask = sprintf("<b>Меняем повестку для переклички №%s</b>", $sessionId);
+                $ask = "<b>Меняем повестку для переклички</b>";
                 if ($reason = $this->getSessionConfig($sessionId, 'reason')) {
                     $ask .= sprintf("\n\n<b>Текущая повестка</b>: %s", $reason);
                 }
@@ -123,6 +123,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         if ($id) {
             $this->setSessionConfig($id, 'reason', $answer->getReplyText());
             $this->updateRosterMessage($id);
+            $this->reply('Повестка обновлена - ' . $answer->getReplyText());
         } else {
             $this->error('Error updating title for session. Message Id: %s, Info: %s', $answer->getAskMessageId(), $answer->getInfo());
         }
@@ -175,11 +176,6 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             return;
         }
 
-        if (!($this->getSessionConfig($id, 'status') == 'open')) {
-            $this->reply('Перекличка завершена');
-            return;
-        }
-
         $reply = $this->getRosterHeader($this->getSessionConfig($id, 'reason'));
         $reply .= "------------------------------------------------\n";
         $reply .= "<b>Результаты переклички</b>: \n ";
@@ -205,7 +201,14 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             }
 
         }
-        $buttons = $this->getCallButtons();
+        if (($this->getSessionConfig($id, 'status') == 'open')) {
+            $buttons = $this->getCallButtons();
+        } else {
+            $reply .= "------------------------------------------------\n";
+            $reply .= "Перекличка завершена 🏁";
+            $buttons = [];
+        }
+
         try {
             $this->updateInlineMessage($id, $reply, $buttons);
         } catch (Exception $e) {
