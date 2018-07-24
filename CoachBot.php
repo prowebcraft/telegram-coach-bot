@@ -6,6 +6,10 @@ use Prowebcraft\Telebot\AnswerInline;
 class CoachBot extends \Prowebcraft\Telebot\Telebot
 {
 
+    public $matches = [
+        '/\/rm_(.*)_(\d+)/ui' => 'removeCustom',
+    ];
+
     const DECISION_YES = 'yes';
     const DECISION_NO = 'no';
     const DECISION_MAYBE = 'maybe';
@@ -100,7 +104,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 $answer->reply("👌 Голос учтен", false);
                 break;
             case 'change_title':
-                if ($this->canManage($sessionId)) {
+                if (!$this->canManage($sessionId)) {
                     $answer->reply('Изменить повестку может только организатор или админ 👮');
                     return;
                 }
@@ -113,7 +117,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 ]);
                 break;
             case 'poke':
-                if ($this->canManage($sessionId)) {
+                if (!$this->canManage($sessionId)) {
                     $answer->reply('Это может только организатор или админ 👮');
                     return;
                 }
@@ -138,8 +142,17 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                     $answer->reply('Нет активных участников для опроса');
                 }
                 break;
+            case 'add_member':
+                if (!$this->canManage($sessionId)) {
+                    $answer->reply('Это может только организатор или админ 👮');
+                    return;
+                }
+                $this->ask("Имя участника?", null, 'addCustomMember', false, true, [
+                    'id' => $sessionId
+                ], false);
+                break;
             case 'finish':
-                if ($this->canManage($sessionId)) {
+                if (!$this->canManage($sessionId)) {
                     $answer->reply('Завершить перекличку может только организатор или админ 👮');
                     return;
                 }
@@ -162,6 +175,22 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             $this->reply('Повестка обновлена - ' . $answer->getReplyText());
         } else {
             $this->error('Error updating title for session. Message Id: %s, Info: %s', $answer->getAskMessageId(), $answer->getInfo());
+        }
+    }
+
+    /**
+     * @param Answer $answer
+     */
+    public function addCustomMember(Answer $answer)
+    {
+        $id = $answer->getExtraData('id');
+        if ($id) {
+            $name = $answer->getReplyText();
+            $customUserId = substr(md5(time() . $name), 0, 4);
+            $this->setSessionConfig($id, "customs.$customUserId", $name);
+            $this->updateRosterMessage($id);
+        } else {
+            $this->error('Error adding custom member for session. Message Id: %s, Info: %s', $answer->getAskMessageId(), $answer->getInfo());
         }
     }
 
@@ -203,6 +232,18 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
     }
 
     /**
+     * @param $id
+     * @param $key
+     * @param $value
+     * @return $this
+     */
+    public function deleteSessionConfig($id, $key)
+    {
+        $this->deleteChatConfig("sessions.$id.$key");
+        return $this;
+    }
+
+    /**
      * Обновить список подписки
      */
     public function updateRosterMessage($id)
@@ -229,10 +270,18 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             self::DECISION_MAYBE => "🤷‍♂️ Может быть",
          ] as $decision => $label) {
             $count = count($decisions[$decision]);
+            if ($decision === self::DECISION_YES && $customs = $this->getSessionConfig($id, 'customs', [])) {
+                $count += count($customs);
+            }
             if ($count) {
                 $reply .= "<b>{$label}</b> ($count)\n";
                 foreach ($decisions[$decision] as $user) {
                     $reply .= "  ☇ " . $this->getUserName($user, $userId)."\n";
+                }
+                if ($decision === self::DECISION_YES) {
+                    foreach ($customs as $customId => $customName) {
+                        $reply .= "  ☇ " . $customName." 🦄 /rm_{$customId}_{$id}\n";
+                    }
                 }
             }
 
@@ -251,6 +300,25 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             $this->error("Error updating roster message - %s\nTrace: %s", $e->getMessage(), $e->getTraceAsString());
         }
 
+    }
+
+    /**
+     * Удаление кастомных участников
+     * @param array $matches
+     */
+    public function removeCustom($matches = [])
+    {
+        if (isset($matches[1]) && isset($matches[2])) {
+            $customId = $matches[1];
+            $session = $matches[2];
+            if ($this->canManage($session)) {
+                $this->deleteSessionConfig($session, "customs.$customId");
+                $this->updateRosterMessage($session);
+                $this->reply('Участник удален 👋');
+            } else {
+                $this->reply('Нет доступа ⛔');
+            }
+        }
     }
 
     /**
@@ -286,12 +354,18 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         ];
         $buttons[] = [
             [
-                'text' => "📋 Изменить повестку",
-                'callback_data' => 'change_title'
-            ],
-            [
                 'text' => "📣 Опросить оставшихся",
                 'callback_data' => 'poke'
+            ],
+            [
+                'text' => "🦄 Добавить участника",
+                'callback_data' => 'add_member'
+            ],
+        ];
+        $buttons[] = [
+            [
+                'text' => "📋 Изменить повестку",
+                'callback_data' => 'change_title'
             ],
             [
                 'text' => "🏁 Завершить перекличку",
@@ -302,12 +376,13 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
     }
 
     /**
+     * Может ли пользователь управлять перекличкой
      * @param $sessionId
      * @return bool
      */
     protected function canManage($sessionId)
     {
-        return $this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin();
+        return $this->getSessionConfig($sessionId, 'starter') == $this->getUserId() || $this->isAdmin();
     }
 
 }
