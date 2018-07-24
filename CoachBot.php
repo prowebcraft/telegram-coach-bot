@@ -68,6 +68,9 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
         ]);
     }
 
+    /**
+     * @param AnswerInline $answer
+     */
     public function onCallReply(AnswerInline $answer)
     {
         $sessionId = $answer->getCallbackQuery()->getMessage()->getMessageId();
@@ -76,6 +79,13 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             return;
         }
         $userId = $this->getUserId();
+
+        //Mark user as active user (for later pokes)
+        $members = $this->getChatConfig('members', []);
+        $members[] = $userId;
+        $members = array_unique($members);
+        $this->setChatConfig('members', $members, false);
+
         $decision = $answer->getData();
         $this->addSessionConfig($sessionId, 'log', [
             'time' => date("Y-m-d H:i:s"),
@@ -90,7 +100,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 $answer->reply("👌 Голос учтен", false);
                 break;
             case 'change_title':
-                if ($this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin()) {
+                if ($this->canManage($sessionId)) {
                     $answer->reply('Изменить повестку может только организатор или админ 👮');
                     return;
                 }
@@ -102,8 +112,34 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                     'id' => $sessionId
                 ]);
                 break;
+            case 'poke':
+                if ($this->canManage($sessionId)) {
+                    $answer->reply('Это может только организатор или админ 👮');
+                    return;
+                }
+                $members = $this->getChatConfig('members', []);
+                $active = array_keys($this->getSessionConfig($sessionId, 'users', []));
+                $left = array_diff($members, $active);
+                $mention = [];
+                foreach ($left as $leftUserId) {
+                    $mention[] = sprintf('<a href="tg://user?id=%s">%s</a>', $leftUserId, $this->getUserName($leftUserId));
+                }
+                if (!empty($mention)) {
+                    $message = implode(', ', $mention) .' - просьба отметиться в перекличке';
+                    $target = $this->getTarget();
+                    if ($target) {
+                        try {
+                            $this->sendMessage($this->getChatId(), $message, 'HTML', true, $sessionId);
+                        } catch (\TelegramBot\Api\Exception $e) {
+                            $this->error('Error sending reply: %s', $e->getMessage());
+                        }
+                    }
+                } else {
+                    $answer->reply('Нет активных участников для опроса');
+                }
+                break;
             case 'finish':
-                if ($this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin()) {
+                if ($this->canManage($sessionId)) {
                     $answer->reply('Завершить перекличку может только организатор или админ 👮');
                     return;
                 }
@@ -113,7 +149,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
 
         $this->updateRosterMessage($sessionId);
     }
-
+    
     /**
      * @param Answer $answer
      */
@@ -254,11 +290,24 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 'callback_data' => 'change_title'
             ],
             [
+                'text' => "📣 Опросить оставшихся",
+                'callback_data' => 'poke'
+            ],
+            [
                 'text' => "🏁 Завершить перекличку",
                 'callback_data' => 'finish'
             ]
         ];
         return $buttons;
+    }
+
+    /**
+     * @param $sessionId
+     * @return bool
+     */
+    protected function canManage($sessionId)
+    {
+        return $this->getSessionConfig($sessionId, 'starter') != $this->getUserId() && !$this->isAdmin();
     }
 
 }
