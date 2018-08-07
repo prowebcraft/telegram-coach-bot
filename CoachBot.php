@@ -108,13 +108,14 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                     $answer->reply('Изменить повестку может только организатор или админ 👮');
                     return;
                 }
-                $ask = "<b>Меняем повестку для переклички</b>";
+                $ask = $this->getUserMention($userId) . ", <b>какая повестка переклички?</b>";
                 if ($reason = $this->getSessionConfig($sessionId, 'reason')) {
                     $ask .= sprintf("\n\n<b>Текущая повестка</b>: %s", $reason);
                 }
                 $this->ask($ask, null, 'setTitleCallback', false, true, [
                     'id' => $sessionId
-                ]);
+                ], null, true);
+                $answer->reply();
                 break;
             case 'poke':
                 if (!$this->canManage($sessionId)) {
@@ -126,7 +127,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                 $left = array_diff($members, $active);
                 $mention = [];
                 foreach ($left as $leftUserId) {
-                    $mention[] = sprintf('<a href="tg://user?id=%s">%s</a>', $leftUserId, $this->getUserName($leftUserId));
+                    $mention[] = $this->getUserMention($leftUserId);
                 }
                 if (!empty($mention)) {
                     $message = implode(', ', $mention) .' - просьба отметиться в перекличке';
@@ -147,9 +148,11 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
                     $answer->reply('Это может только организатор или админ 👮');
                     return;
                 }
-                $this->ask("Имя участника?", null, 'addCustomMember', false, true, [
+                $ask = $this->getUserMention($userId) . ", <b>кого добавить в список</b>?";
+                $this->ask($ask, null, 'addCustomMember', false, true, [
                     'id' => $sessionId
-                ], false);
+                ], false, true);
+                $answer->reply();
                 break;
             case 'finish':
                 if (!$this->canManage($sessionId)) {
@@ -189,6 +192,7 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             $customUserId = substr(md5(time() . $name), 0, 4);
             $this->setSessionConfig($id, "customs.$customUserId", $name);
             $this->updateRosterMessage($id);
+            $this->replyToMessage("Участник <b>{$name}</b> 🦄 добавлен в список 👌", $id);
         } else {
             $this->error('Error adding custom member for session. Message Id: %s, Info: %s', $answer->getAskMessageId(), $answer->getInfo());
         }
@@ -312,9 +316,14 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
             $customId = $matches[1];
             $session = $matches[2];
             if ($this->canManage($session)) {
-                $this->deleteSessionConfig($session, "customs.$customId");
-                $this->updateRosterMessage($session);
-                $this->reply('Участник удален 👋');
+                $name = $this->getSessionConfig($session, "customs.$customId");
+                if (!empty($name)) {
+                    $this->deleteSessionConfig($session, "customs.$customId");
+                    $this->updateRosterMessage($session);
+                    $this->replyToMessage("Участник <b>{$name}</b> удален из списка 👋", $session);
+                } else {
+                    $this->reply('Не найден участник для удаления 🙅‍♂️');
+                }
             } else {
                 $this->reply('Нет доступа ⛔');
             }
@@ -384,5 +393,59 @@ class CoachBot extends \Prowebcraft\Telebot\Telebot
     {
         return $this->getSessionConfig($sessionId, 'starter') == $this->getUserId() || $this->isAdmin();
     }
+
+
+    /**
+     *
+     */
+    public function isAdminCommand()
+    {
+        $info = $this->getDebugInfo();
+        $buttons = [];
+        $buttons[] = [
+            [
+                'text' => "Get Inline Debug",
+                'callback_data' => 'get-inline-debug'
+            ]
+        ];
+        $this->askInline($info, $buttons, 'isAdminCallback');
+    }
+
+    /**
+     *
+     */
+    public function isAdminCallback()
+    {
+        $info = $this->getDebugInfo();
+        $this->replyToLastMessage($info);
+    }
+
+    protected function getDebugInfo()
+    {
+        return sprintf(
+            "User Id: %s\nIs Admin: %s\nIs Owner: %s \n",
+            $this->getUserId(),
+            $this->isAdmin() ? 'y' : 'n',
+            $this->isGlobalAdmin() ? 'y' : 'n'
+        );
+    }
+
+    /**
+     * Get Mention Link (html format)
+     * @param $userId
+     * @param string $format
+     * markdown or html format
+     * @return string
+     */
+    protected function getUserMention($userId, $format = 'html')
+    {
+        switch ($format) {
+            case 'markdown':
+                return sprintf('[%s](tg://user?id=%s)', $this->getUserName($userId), $userId);
+            default:
+                return sprintf('<a href="tg://user?id=%s">%s</a>', $userId, $this->getUserName($userId));
+        }
+    }
+
 
 }
